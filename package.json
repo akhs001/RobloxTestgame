@@ -1,0 +1,24 @@
+{
+  "name": "robloxtestgame",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akhs001/RobloxTestgame.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/akhs001/RobloxTestgame/issues"
+  },
+  "homepage": "https://github.com/akhs001/RobloxTestgame#readme",
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "three": "^0.186.1"
+  }
+}

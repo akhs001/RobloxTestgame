@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Egg Brawl – Prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --font: 'Fredoka', 'Trebuchet MS', 'Segoe UI', sans-serif; }
+  * { box-sizing: border-box; user-select: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #7cc4ff; font-family: var(--font); color: #fff; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .shadow { text-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 6px rgba(0,0,0,.35); }
+  #stats { position: fixed; left: 14px; top: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .stat { background: rgba(20,24,40,.78); border: 3px solid rgba(255,255,255,.18); border-radius: 14px; padding: 6px 14px; min-width: 170px; display: flex; align-items: baseline; gap: 8px; }
+  .stat b { font-size: 13px; opacity: .8; letter-spacing: .5px; flex: 1; }
+  .stat span { font-size: 26px; font-weight: 700; }
+  .stat small { font-size: 12px; opacity: .85; }
+  #st-power { border-color: #ff8a3d; } #st-speed { border-color: #6dff9c; } #st-coins { border-color: #ffd23f; }
+  #goal { position: fixed; left: 14px; top: 184px; width: 250px; background: rgba(20,24,40,.78); border-radius: 14px; padding: 8px 12px; font-size: 14px; line-height: 1.25; }
+  .bar { height: 14px; background: rgba(0,0,0,.5); border-radius: 8px; overflow: hidden; margin-top: 6px; border: 2px solid rgba(255,255,255,.2); }
+  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(#ffb347, #ff7b1c); transition: width .15s; }
+  #hpbar { position: fixed; left: 50%; bottom: 40px; width: min(440px, 80vw); transform: translateX(-50%); }
+  #hpbar .bar { height: 26px; } #hpbar i { background: linear-gradient(#6bff7a, #2bc43f); }
+  #hpbar span { position: absolute; left: 0; right: 0; top: 0; text-align: center; font-size: 16px; line-height: 26px; font-weight: 700; }
+  #bossbar { position: fixed; left: 50%; top: 18px; width: min(560px, 86vw); transform: translateX(-50%); text-align: center; display: none; }
+  #bossbar .bar { height: 24px; margin-top: 4px; } #boss-hp { background: linear-gradient(#ff6b6b, #d31f1f) !important; }
+  #boss-name { font-size: 26px; font-weight: 700; } #boss-info { font-size: 14px; margin-top: 4px; }
+  #prompt { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); font-size: 22px; font-weight: 700; padding: 6px 18px; background: rgba(20,24,40,.8); border-radius: 12px; display: none; white-space: nowrap; }
+  #toasts { position: fixed; left: 50%; top: 110px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+  .toast { font-size: 34px; font-weight: 700; animation: pop .25s ease-out; transition: opacity .5s; text-align: center; }
+  .toast.small { font-size: 22px; }
+  @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  #pets { position: fixed; right: 14px; top: 14px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .pet { background: rgba(20,24,40,.78); border-radius: 12px; padding: 4px 12px; font-size: 14px; border-left: 8px solid; }
+  #help { position: fixed; right: 14px; bottom: 14px; font-size: 13px; line-height: 1.5; background: rgba(20,24,40,.7); padding: 8px 12px; border-radius: 12px; }
+  kbd { background: rgba(255,255,255,.9); color: #222; border-radius: 5px; padding: 0 6px; font-family: inherit; font-weight: 700; text-shadow: none; }
+  #labels, #floats { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .label { position: absolute; transform: translate(-50%, -100%); text-align: center; font-size: 15px; font-weight: 700; line-height: 1.15; white-space: nowrap; }
+  .label .nm { font-size: 18px; } .label.dim { opacity: .75; }
+  .float { position: absolute; font-weight: 700; font-size: 26px; white-space: nowrap; transform: translate(-50%, -50%); }
+  .float.dmg { color: #fff; font-size: 30px; -webkit-text-stroke: 1px #c00; } .float.crit { color: #ffd23f; font-size: 42px; }
+  .float.hurt { color: #ff5a5a; } .float.gain { color: #ffb347; } .float.coin { color: #ffd23f; } .float.spd { color: #6dff9c; } .float.dodge { color: #8fe9ff; }
+  #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(30,60,110,.55); backdrop-filter: blur(3px); z-index: 10; }
+  .card { background: rgba(20,24,40,.92); border: 4px solid #ffb62e; border-radius: 22px; padding: 26px 34px; max-width: 560px; text-align: center; }
+  .card h1 { margin: 0 0 4px; font-size: 44px; color: #ffd23f; } .card p { margin: 8px 0; font-size: 17px; line-height: 1.35; }
+  .card ul { text-align: left; font-size: 16px; line-height: 1.6; margin: 10px 0; padding-left: 22px; }
+  button { font-family: var(--font); font-size: 26px; font-weight: 700; color: #fff; background: linear-gradient(#5ee06a, #2aa83a); border: 4px solid #1b7a29; border-radius: 14px; padding: 8px 40px; cursor: pointer; margin: 6px; }
+  button.alt { font-size: 15px; padding: 4px 14px; background: linear-gradient(#777, #444); border-color: #333; }
+  button:hover { filter: brightness(1.12); }
+  #flash { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(transparent 40%, rgba(255,0,0,.55)); opacity: 0; transition: opacity .25s; }
+</style>
+</head>
+<body>
+<div id="labels"></div><div id="floats"></div><div id="flash"></div>
+<div id="stats" class="shadow">
+  <div class="stat" id="st-power"><b>💪 POWER</b><span id="v-power">0</span><small id="v-rank">Noob</small></div>
+  <div class="stat" id="st-speed"><b>👟 SPEED</b><span id="v-speed">0</span></div>
+  <div class="stat" id="st-coins"><b>🪙 COINS</b><span id="v-coins">0</span><small id="v-cps"></small></div>
+</div>
+<div id="goal" class="shadow"><div id="goal-text"></div><div class="bar"><i id="goal-fill"></i></div></div>
+<div id="pets" class="shadow"></div>
+<div id="bossbar" class="shadow"><div id="boss-name"></div><div class="bar"><i id="boss-hp"></i></div><div id="boss-info"></div></div>
+<div id="toasts" class="shadow"></div>
+<div id="prompt" class="shadow"></div>
+<div id="hpbar" class="shadow"><div class="bar"><i id="hp-fill"></i></div><span id="hp-text"></span></div>
+<div id="help" class="shadow">
+  <kbd>WASD</kbd> move &nbsp; <kbd>Click</kbd>/<kbd>J</kbd> punch (3-hit combo)<br>
+  <kbd>Space</kbd>/<kbd>Shift</kbd> dodge roll &nbsp; <kbd>E</kbd> hold to train / use<br>
+  <kbd>Right-drag</kbd>/<kbd>←→</kbd> camera &nbsp; <kbd>Wheel</kbd> zoom
+</div>
+<div id="start">
+  <div class="card">
+    <h1>🥚 EGG BRAWL</h1>
+    <p><b>Prototype</b> – steal the egg, but first beat the guard!</p>
+    <ul>
+      <li>💪 <b>Train</b> at the gym (hold <kbd>E</kbd>) to get bigger &amp; stronger</li>
+      <li>🥊 <b>Fight</b> a guard in his pen – dodge the red warnings!</li>
+      <li>🥚 <b>Win</b> → grab the egg → run to the <b>Hatchery</b></li>
+      <li>🐾 Pets &amp; coins unlock better gym gear → fight the next, tougher guard</li>
+      <li>👟 Speed is second: faster running, dodging &amp; delivery bonus</li>
+    </ul>
+    <button id="play">PLAY</button><br>
+    <button id="reset" class="alt">New game (erase save)</button>
+  </div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
