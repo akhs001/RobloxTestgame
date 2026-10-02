@@ -15,13 +15,14 @@ Progress is saved in `localStorage` (use the "New game" button, or add `?reset` 
 | Key | Action |
 |---|---|
 | WASD | move |
-| Click / J | punch (3-hit combo, 3rd hit is a heavy finisher that can stagger a guard) |
 | Space / Shift | dodge roll (invincible for a moment) |
-| Hold E | train at a station / press E near a locked one to buy it |
+| E | near a station: start **auto-training** (move or press E again to stop); near a locked one: buy it |
 | Right-drag or ←/→ | rotate camera, mouse wheel zooms |
 
 ## Design notes
 * **Power is king**: Power raises damage *and* max HP *and* makes your character visibly bigger/buffer. Speed (treadmill) is secondary: run speed, shorter dodge cooldown, and the delivery-time bonus on eggs.
+* **Fighting is automatic**: stand in a guard's pen and you punch him on your own (3-hit combo, the 3rd is a heavy finisher that can stagger). You only move and dodge.
+* **Pets**: all pets live in the fenced Pet Yard. Click one in the top-right list to equip it – that one follows you and fights beside you (Blobby bites+heals, Foxy bites fast, Rexy stomps, Draco breathes fire). Every owned pet still gives passive coins and +% power.
 * **4 guards**, each tougher, with new attacks: Rookie Rick (swing) → Bouncer Bob (+slam) → Brute Bruno (+charge) → Titan Tank (boss, enrages under 50%). Attacks are telegraphed with red zones – dodge them, punch during the recovery.
 * Beating a guard knocks him out for 10 s; grab the egg and carry it (slowed) to the Hatchery. Quick delivery = coin bonus.
 * Eggs hatch into pets that give passive coins and +% power per rep. Coins unlock stronger gym stations (+1 / +3 / +10 / +35 power per rep).

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GUARDS, STATIONS, WORLD, HATCHERY } from './config.js';
+import { GUARDS, STATIONS, WORLD, HATCHERY, PET_YARD } from './config.js';
 import { rbox, stdMat, mk, makeSign } from './models.js';
 
 function canvasTex(size, draw, repeat) {
@@ -160,12 +160,9 @@ export function buildWorld(scene) {
   // ---- gym + speed zone
   const slate = stdMat(0x39414f), trim = stdMat(0x4aa3ff, { emissive: 0x2a6bd6, emissiveIntensity: 0.35 });
   const mat = (x, z, w, d, tr) => { scene.add(mk(rbox(w, 0.3, d, 0.1), slate, x, 0.15, z, false), mk(rbox(w + 0.8, 0.2, 0.7, 0.05), tr, x, 0.2, z + d / 2), mk(rbox(w + 0.8, 0.2, 0.7, 0.05), tr, x, 0.2, z - d / 2)); };
-  mat(-44, 40, 52, 22, trim);
-  mat(50, 40, 22, 26, stdMat(0x2fd37a, { emissive: 0x1a9a55, emissiveIntensity: 0.35 }));
-  const gs = makeSign('GYM', 10, 3, '#14202e', '#8fd4ff', '#4aa3ff'); gs.position.set(-44, 14, 25); scene.add(gs);
-  const ss = makeSign('SPEED ZONE', 13, 3, '#0f2a1e', '#9bffc4', '#2fd37a'); ss.position.set(50, 14, 25); scene.add(ss);
-  for (const x of [-49, -39, 43, 57]) scene.add(mk(rbox(0.9, 14, 0.9, 0.1), postM, x, 7, 25));
-
+  mat(-43.5, 40, 58, 22, trim);
+  const gs = makeSign('GYM', 10, 3, '#14202e', '#8fd4ff', '#4aa3ff'); gs.position.set(-43.5, 14, 25); scene.add(gs);
+  for (const x of [-49, -38]) scene.add(mk(rbox(0.9, 14, 0.9, 0.1), postM, x, 7, 25));
   const treadTex = stripeTexture();
   const stations = STATIONS.map((st) => {
     const g = new THREE.Group(); g.position.set(st.x, 0, st.z); scene.add(g);
@@ -194,6 +191,22 @@ export function buildWorld(scene) {
     return { def: st, group: g, padMat, belt, standY: st.standY || 0 };
   });
 
+
+  // ---- pet yard (fenced area east of the hatchery; gate faces the hatchery)
+  const Y = PET_YARD, yc = { x: (Y.minX + Y.maxX) / 2, z: (Y.minZ + Y.maxZ) / 2 };
+  const yt = gt.clone(); yt.needsUpdate = true; yt.repeat.set((Y.maxX - Y.minX) / 8, (Y.maxZ - Y.minZ) / 8);
+  const yfloor = new THREE.Mesh(new THREE.PlaneGeometry(Y.maxX - Y.minX, Y.maxZ - Y.minZ), stdMat(0xd8ffc8, { map: yt, roughness: 0.95 }));
+  yfloor.rotation.x = -Math.PI / 2; yfloor.position.set(yc.x, 0.03, yc.z); yfloor.receiveShadow = true; scene.add(yfloor);
+  fence(Y.minX, Y.minZ, Y.maxX, Y.minZ); fence(Y.minX, Y.maxZ, Y.maxX, Y.maxZ); fence(Y.maxX, Y.minZ, Y.maxX, Y.maxZ);
+  fence(Y.minX, Y.minZ, Y.minX, 39.5); fence(Y.minX, 48.5, Y.minX, Y.maxZ);
+  const ys = makeSign('PET YARD', 11, 2.8, '#10301a', '#c9ffb8', '#ff9acb'); ys.position.set(yc.x, 14, Y.minZ - 1); scene.add(ys);
+  for (const s of [-1, 1]) scene.add(mk(rbox(0.9, 14, 0.9, 0.1), postM, yc.x + s * 6.5, 7, Y.minZ - 1));
+  const house = new THREE.Group(); house.position.set(Y.maxX - 6, 0, Y.minZ + 6);
+  house.add(mk(rbox(6, 3.4, 5, 0.2), stdMat(0xd9a05b), 0, 1.7, 0), mk(new THREE.ConeGeometry(4.8, 2.6, 4), stdMat(0xc0392b), 0, 4.6, 0), mk(rbox(2, 2.2, 0.3, 0.1), stdMat(0x2a1a10), 0, 1.1, 2.5));
+  house.children[1].rotation.y = Math.PI / 4; scene.add(house);
+  const bowl = mk(new THREE.CylinderGeometry(1.2, 0.9, 0.6, 16), stdMat(0xff6b9a), Y.minX + 5, 0.3, Y.maxZ - 5); scene.add(bowl);
+  const ball = mk(new THREE.SphereGeometry(0.9, 14, 10), stdMat(0xff4d4d), Y.maxX - 8, 0.9, Y.maxZ - 7); scene.add(ball);
+
   // ---- trees & bushes (avoid play areas)
   const leaf1 = stdMat(0x36b83a), leaf2 = stdMat(0x4fd24a), trunk = stdMat(0x7a4a22);
   const tree = (x, z, s = 1) => {
@@ -205,7 +218,7 @@ export function buildWorld(scene) {
   for (let z = -28; z <= 62; z += 11) { tree(-76, z + Math.random() * 3, 0.9 + Math.random() * 0.4); tree(76, z + Math.random() * 3, 0.9 + Math.random() * 0.4); }
   for (let x = -70; x <= 70; x += 14) if (Math.abs(x) > 12) tree(x + Math.random() * 3, 68, 0.9 + Math.random() * 0.4);
   const bushM = [stdMat(0x2fa534), stdMat(0xff7aa8), stdMat(0xffd84a)];
-  const blocked = (x, z) => (z < -30) || (x > -72 && x < -16 && z > 26 && z < 54) || (x > 38 && x < 62 && z > 24 && z < 56) || (Math.hypot(x, z - 44) < 11);
+  const blocked = (x, z) => (z < -30) || (x > -75 && x < -13 && z > 26 && z < 54) || (x > 16 && x < 60 && z > 26 && z < 64) || (Math.hypot(x, z - 44) < 11);
   for (let i = 0; i < 60; i++) {
     const x = -78 + Math.random() * 156, z = -28 + Math.random() * 98;
     if (blocked(x, z)) continue;
@@ -214,7 +227,7 @@ export function buildWorld(scene) {
   }
 
   return {
-    colliders, pens, stations, hatchery, sun,
+    colliders, pens, stations, hatchery, sun, yard: { ...Y, cx: yc.x, cz: yc.z },
     treadSpeed: 0,
     update(dt) {
       for (const c of clouds) { c.position.x += c.userData.v * dt; if (c.position.x > 340) c.position.x = -340; }

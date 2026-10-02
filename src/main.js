@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GUARDS, STATIONS, WORLD, HATCHERY, RANKS, ATTACKS } from './config.js';
+import { GUARDS, STATIONS, WORLD, HATCHERY, PET_YARD, RANKS, ATTACKS } from './config.js';
 import { buildHumanoid, animateRig, makeEgg, makePet, makeDumbbell } from './models.js';
 import { buildWorld } from './world.js';
 import { initAudio, sfx } from './audio.js';
@@ -18,7 +18,7 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const SAVE_KEY = 'egg-brawl-proto-v1';
 const params = new URLSearchParams(location.search);
 if (params.has('reset')) localStorage.removeItem(SAVE_KEY);
-let S = { power: 0, speed: 0, coins: 0, owned: { bench: true, treadmill: true }, pets: [], beaten: {} };
+let S = { power: 0, speed: 0, coins: 0, owned: { bench: true, treadmill: true }, pets: [], equipped: null, beaten: {} };
 try { Object.assign(S, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) { /* ignore */ }
 for (const k of ['power', 'speed', 'coins']) if (params.has(k)) S[k] = +params.get(k);
 if (params.has('all')) for (const st of STATIONS) S.owned[st.id] = true;
@@ -124,25 +124,42 @@ const guardLabels = guards.map((g) => { const l = addLabel(() => _v.set(g.pos.x,
 
 // ------------------------------------------------------------------ stations / hatchery labels
 const stationLabels = world.stations.map((s) => addLabel(() => _v.set(s.def.x, 6.5, s.def.z), 32, 'dim'));
+const yardLabel = addLabel(() => _v.set(YARD.cx, 7, YARD.cz), 55);
 const hatchLabel = addLabel(() => _v.set(HATCHERY.x, 7, HATCHERY.z), 45);
 hatchLabel.hideWhen = () => !P.carry && Math.hypot(P.pos.x - HATCHERY.x, P.pos.z - HATCHERY.z) < HATCHERY.r + 2;
 const playerLabel = addLabel(() => _v.set(P.pos.x, 5.4 * P.scale + 1.4, P.pos.z), 999);
 playerLabel.hideWhen = () => P.state === 'train' || guards.some((g) => g.engaged);
 
 // ------------------------------------------------------------------ pets
-const pets = [];
+// All owned pets live in the Pet Yard; ONE equipped pet follows you and helps in fights.
+const pets = [], YARD = world.yard;
+const yardPoint = () => new THREE.Vector3(rnd(YARD.minX + 3, YARD.maxX - 3), 0, rnd(YARD.minZ + 3, YARD.maxZ - 3));
+const inYard = (v) => v.x > YARD.minX + 0.5 && v.x < YARD.maxX && v.z > YARD.minZ && v.z < YARD.maxZ;
 function spawnPetMesh(tier, at) {
   const mesh = makePet(tier); mesh.scale.setScalar(0.9 + tier * 0.1); mesh.position.copy(at); scene.add(mesh);
-  pets.push({ tier, mesh, pos: mesh.position, t: Math.random() * 6 });
+  const p = { tier, mesh, pos: mesh.position, t: Math.random() * 6, mode: 'yard', target: null, wait: rnd(0, 2), cd: 0, lunge: 0 };
+  pets.push(p); return p;
 }
-S.pets.slice(0, 6).forEach((t, i) => spawnPetMesh(t, new THREE.Vector3(P.pos.x - 3 - i * 2, 0, P.pos.z + 3)));
+function applyEquip() {
+  pets.forEach((p) => (p.mode = 'yard'));
+  const f = S.equipped == null ? null : pets.find((p) => p.tier === S.equipped);
+  if (f) { f.mode = 'follow'; f.target = null; } else S.equipped = null;
+}
+function setEquipped(tier) {
+  S.equipped = S.equipped === tier ? null : tier; applyEquip(); refreshPetsHud(); save(); sfx('pickup');
+  if (S.equipped != null) toast(`${GUARDS[tier].egg.pet.name} will help you fight!`, true, 1800, '#ffe08a');
+}
+S.pets.slice(0, 40).forEach((t) => spawnPetMesh(t, yardPoint()));
+applyEquip();
 function refreshPetsHud() {
   const counts = {}; S.pets.forEach((t) => (counts[t] = (counts[t] || 0) + 1));
-  $('pets').innerHTML = Object.keys(counts).map((t) => {
-    const p = GUARDS[t].egg.pet;
-    return `<div class="pet" style="border-color:#${p.color.toString(16).padStart(6, '0')}">${p.name} ×${counts[t]} &nbsp;<small>+${Math.round(p.pw * 100 * counts[t])}% power · ${(p.cps * counts[t]).toFixed(1)}🪙/s</small></div>`;
-  }).join('');
+  const rows = Object.keys(counts).map((t) => {
+    const p = GUARDS[t].egg.pet, on = S.equipped === +t;
+    return `<div class="pet${on ? ' on' : ''}" data-tier="${t}" style="border-color:#${p.color.toString(16).padStart(6, '0')}"><b>${on ? '⭐ ' : ''}${p.name} ×${counts[t]}</b> <small>${on ? 'with you · ' : 'click to equip · '}${p.help.text}<br>+${Math.round(p.pw * 100 * counts[t])}% power · ${(p.cps * counts[t]).toFixed(1)}🪙/s</small></div>`;
+  });
+  $('pets').innerHTML = rows.length ? '<div class="pt">🐾 PETS</div>' + rows.join('') : '';
 }
+$('pets').addEventListener('click', (e) => { const d = e.target.closest('.pet'); if (d) setEquipped(+d.dataset.tier); });
 refreshPetsHud();
 
 // ------------------------------------------------------------------ input
@@ -157,10 +174,10 @@ addEventListener('keydown', (e) => {
   if (k === 'j') queueAttack();
   if (k === 'e') interact();
 });
-addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); keys[k] = false; if (k === 'e' && P.state === 'train') stopTrain(); });
+addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 addEventListener('contextmenu', (e) => e.preventDefault());
-addEventListener('mousedown', (e) => { if (!started) return; if (e.button === 0) queueAttack(); if (e.button === 2) dragging = true; });
+addEventListener('mousedown', (e) => { if (!started || e.target.closest('#pets')) return; if (e.button === 0) queueAttack(); if (e.button === 2) dragging = true; });
 addEventListener('mouseup', () => (dragging = false));
 addEventListener('mousemove', (e) => { if (dragging) { cam.yaw -= e.movementX * 0.006; cam.pitch = clamp(cam.pitch + e.movementY * 0.004, 0.15, 1.2); } });
 addEventListener('wheel', (e) => { cam.zoom = clamp(cam.zoom + Math.sign(e.deltaY) * 0.08, 0.6, 1.9); }, { passive: true });
@@ -198,7 +215,8 @@ function interact() {
       S.coins -= st.def.cost; S.owned[st.def.id] = true; sfx('buy'); save();
       toast(`${st.def.name} unlocked!`, false, 2200, '#ffd23f'); burst(new THREE.Vector3(st.def.x, 2, st.def.z), st.def.color, 24, 9, 0.9, 0.35);
     } else { sfx('warn'); toast(`Need ${fmt(st.def.cost)} coins`, true, 1500, '#ff8a8a'); }
-  } else if (P.state === 'free') startTrain(st);
+  } else if (P.state === 'train') stopTrain();
+  else if (P.state === 'free') startTrain(st);
 }
 function startTrain(st) {
   P.state = 'train'; P.train = { st, rep: 0 }; P.vel.set(0, 0, 0);
@@ -216,6 +234,14 @@ function queueAttack() {
   if (P.state === 'down') return; initAudio();
   if (P.state === 'train') stopTrain();
   if (P.state === 'free') startAttack(); else if (P.state === 'attack') P.queued = true;
+}
+function autoTarget() {
+  for (const g of guards) {
+    if (g.state === 'ko') continue;
+    const pen = g.pen; if (!(P.pos.x > pen.minX - 1 && P.pos.x < pen.maxX + 1 && P.pos.z > pen.minZ && P.pos.z < pen.maxZ + 0.5)) continue;
+    if (Math.hypot(g.pos.x - P.pos.x, g.pos.z - P.pos.z) <= COMBO[0].reach * (0.6 + 0.4 * P.scale) + g.radius - 0.4) return g;
+  }
+  return null;
 }
 function nearestGuard(maxD) {
   let best = null, bd = maxD;
@@ -252,12 +278,13 @@ function playerHit(c) {
   }
   if (!hitAny) return;
 }
-function damageGuard(g, dmg, c, nx, nz) {
+function damageGuard(g, dmg, c, nx, nz, quiet = false) {
   g.hp -= dmg; g.hit = 1;
   const at = new THREE.Vector3(g.pos.x - nx * g.radius, 3.2 * g.def.scale, g.pos.z - nz * g.radius);
   floatText(fmt(dmg), at, c.finisher ? 'crit' : 'dmg', 0.8, 2.5);
   burst(at, c.finisher ? 0xffd23f : 0xffffff, c.finisher ? 16 : 8, 9, 0.45, 0.3);
-  sfx(c.finisher ? 'bighit' : 'hit'); hitstop = c.finisher ? 0.11 : 0.05; cam.shake = Math.max(cam.shake, c.finisher ? 0.5 : 0.18);
+  sfx(c.finisher ? 'bighit' : 'hit');
+  if (!quiet) { hitstop = c.finisher ? 0.11 : 0.05; cam.shake = Math.max(cam.shake, c.finisher ? 0.5 : 0.18); }
   g.pos.x += nx * (c.finisher ? 1.4 : 0.5) / Math.sqrt(g.def.scale); g.pos.z += nz * (c.finisher ? 1.4 : 0.5) / Math.sqrt(g.def.scale);
   if (g.state === 'idle') { g.state = 'chase'; g.engaged = true; g.cd = 0.6; }
   if (!g.enraged && g.def.boss && g.hp < g.max * 0.5) { g.enraged = true; toast('THE TITAN IS ENRAGED!', false, 2400, '#ff6b6b'); sfx('warn'); }
@@ -305,7 +332,7 @@ function respawnPlayer() {
 // ------------------------------------------------------------------ player update
 function updatePlayer(dt) {
   P.iframe = Math.max(0, P.iframe - dt); P.rollCd = Math.max(0, P.rollCd - dt); P.hit = Math.max(0, P.hit - dt * 3);
-  P.flash = Math.max(0, P.flash - dt * 4); P.pop = Math.max(0, P.pop - dt * 3.5); P.comboT = Math.max(0, P.comboT - dt); P.noHurtT = Math.max(0, P.noHurtT - dt);
+  P.flash = Math.max(0, P.flash - dt * 4); P.autoCd = Math.max(0, (P.autoCd || 0) - dt); P.pop = Math.max(0, P.pop - dt * 3.5); P.comboT = Math.max(0, P.comboT - dt); P.noHurtT = Math.max(0, P.noHurtT - dt);
   const k = 1 - Math.exp(-dt * 3);
   P.scale = lerp(P.scale, targetScale(), k); P.bulk = lerp(P.bulk, targetBulk(), k); P.rig.setBulk(P.bulk);
   P.rig.root.scale.setScalar(P.scale * (1 + 0.14 * Math.sin(P.pop * Math.PI)));
@@ -322,6 +349,7 @@ function updatePlayer(dt) {
       P.vel.x = lerp(P.vel.x, inp.x * spd, kk); P.vel.z = lerp(P.vel.z, inp.z * spd, kk);
       if (inp.mag) P.face = lerpAngle(P.face, Math.atan2(inp.x, inp.z), 1 - Math.exp(-dt * 16));
       walkAnim = Math.min(1.3, Math.hypot(P.vel.x, P.vel.z) / 13);
+      if (P.autoCd <= 0 && autoTarget()) startAttack();   // battles are automatic
       break;
     }
     case 'attack': {
@@ -329,7 +357,7 @@ function updatePlayer(dt) {
       P.vel.x += inp.x * 18 * dt; P.vel.z += inp.z * 18 * dt;
       if (!a.hit && a.t >= c.hitAt) playerHit(c);
       animAtk = { arms: c.arms, t: Math.min(1, a.t), wind: c.wind, back: c.back, fwd: c.fwd, lean: c.lean };
-      if (a.t >= 1) { P.comboT = 0.45; P.state = 'free'; P.atk = null; if (P.queued) { P.queued = false; startAttack(); } }
+      if (a.t >= 1) { P.comboT = 0.45; P.state = 'free'; P.atk = null; P.autoCd = c.finisher ? 0.3 : 0; if (P.queued) { P.queued = false; startAttack(); } }
       break;
     }
     case 'roll': {
@@ -405,7 +433,8 @@ function updateHatch(dt) {
   if (Math.random() < p * 0.6) burst(world.hatchery.eggAnchor, GUARDS[hatch.tier].egg.spot, 1, 4, 0.5, 0.2, 6);
   if (p >= 1) {
     const tier = hatch.tier, e = GUARDS[tier].egg; scene.remove(hatch.mesh); hatch.active = false;
-    S.pets.push(tier); if (pets.length < 6) spawnPetMesh(tier, world.hatchery.eggAnchor.clone().setY(0.6));
+    S.pets.push(tier); if (pets.length < 40) spawnPetMesh(tier, world.hatchery.eggAnchor.clone().setY(0));
+    if (S.equipped == null) { S.equipped = tier; applyEquip(); toast(`${e.pet.name} is now your battle buddy!`, true, 2600, '#ffe08a'); }
     const coins = Math.round(e.coins * hatch.bonus); S.coins += coins; refreshPetsHud(); save();
     sfx('hatch'); hitstop = 0.05; cam.shake = 0.4;
     toast(`${e.pet.name} hatched!`, false, 2800, '#' + e.pet.color.toString(16).padStart(6, '0'));
@@ -547,15 +576,56 @@ function updateCamera(dt) {
 }
 
 // ------------------------------------------------------------------ pets follow
+function helperTarget() {
+  if (P.state === 'down') return null;
+  return guards.find((g) => g.engaged && g.state !== 'ko' && g.state !== 'idle' && P.pos.x > g.pen.minX - 1 && P.pos.x < g.pen.maxX + 1 && P.pos.z > g.pen.minZ && P.pos.z < g.pen.maxZ + 0.5) || null;
+}
+function moveToward(p, tx, tz, sp, dt, face = true) {
+  const dx = tx - p.pos.x, dz = tz - p.pos.z, d = Math.hypot(dx, dz);
+  if (d < 0.05) return 0;
+  const st = Math.min(d, sp * dt); p.pos.x += (dx / d) * st; p.pos.z += (dz / d) * st;
+  if (face) p.mesh.rotation.y = lerpAngle(p.mesh.rotation.y, Math.atan2(dx, dz), 1 - Math.exp(-dt * 10));
+  return d;
+}
 function updatePets(dt) {
-  pets.forEach((p, i) => {
-    const lead = i === 0 ? P.pos : pets[i - 1].pos, gap = i === 0 ? 3.5 * P.scale + 1 : 2.6;
-    const dx = lead.x - p.pos.x, dz = lead.z - p.pos.z, d = Math.hypot(dx, dz); p.t += dt;
-    let moving = false;
-    if (d > gap) { const sp = Math.max(8, (d - gap) * 5); p.pos.x += (dx / d) * sp * dt; p.pos.z += (dz / d) * sp * dt; moving = true; p.mesh.rotation.y = lerpAngle(p.mesh.rotation.y, Math.atan2(dx, dz), 1 - Math.exp(-dt * 10)); }
-    p.pos.y = moving ? Math.abs(Math.sin(p.t * 9)) * 0.6 : Math.sin(p.t * 2) * 0.05 + 0.05;
-    p.mesh.userData.head.rotation.x = Math.sin(p.t * 3) * 0.08;
-  });
+  const tg = helperTarget();
+  for (const p of pets) {
+    p.t += dt; p.cd = Math.max(0, p.cd - dt); p.lunge = Math.max(0, p.lunge - dt * 4);
+    let moving = false, hop = 0;
+    if (p.mode === 'follow') {
+      const help = GUARDS[p.tier].egg.pet.help;
+      if (tg) {
+        // battle buddy: circle the guard and strike on a cooldown
+        const a = Math.atan2(P.pos.x - tg.pos.x, P.pos.z - tg.pos.z) + 1.1, r = tg.radius + 1.6;
+        const tx = tg.pos.x + Math.sin(a) * r, tz = tg.pos.z + Math.cos(a) * r;
+        const d = moveToward(p, tx, tz, 16, dt, false); moving = d > 0.3;
+        p.mesh.rotation.y = lerpAngle(p.mesh.rotation.y, Math.atan2(tg.pos.x - p.pos.x, tg.pos.z - p.pos.z), 1 - Math.exp(-dt * 10));
+        if (d < 2.5 && p.cd <= 0) {
+          p.cd = help.cd; p.lunge = 1;
+          const nx = (tg.pos.x - p.pos.x), nz = (tg.pos.z - p.pos.z), l = Math.hypot(nx, nz) || 1;
+          damageGuard(tg, pDmg() * help.dmg, { finisher: false }, nx / l, nz / l, true);
+          if (help.heal && P.state !== 'down') { const h = maxHp() * help.heal; P.hp = Math.min(maxHp(), P.hp + h); floatText('+' + fmt(h), P.pos.clone().setY(5 * P.scale), 'spd', 0.8, 2); }
+        }
+      } else {
+        const gap = 3.5 * P.scale + 1, d = Math.hypot(P.pos.x - p.pos.x, P.pos.z - p.pos.z);
+        if (d > gap) { moveToward(p, P.pos.x, P.pos.z, Math.max(10, (d - gap) * 5), dt); moving = true; }
+      }
+    } else {
+      // yard pet: walk through the gate, then wander around
+      p.wait -= dt;
+      if (!inYard(p.pos)) {
+        const gx = YARD.minX - 2.5; p.target = null; moving = true;
+        if (p.pos.x < YARD.minX - 0.5 && Math.hypot(p.pos.x - gx, p.pos.z - 44) > 1.5) moveToward(p, gx, 44, 12, dt);
+        else if (p.pos.x < YARD.minX + 0.5) moveToward(p, YARD.minX + 4, 44, 12, dt);
+        else moveToward(p, YARD.cx, YARD.cz, 12, dt);
+      }
+      else if (p.target) { if (moveToward(p, p.target.x, p.target.z, 4.5, dt) < 0.4) { p.target = null; p.wait = rnd(1, 4); } else moving = true; }
+      else if (p.wait <= 0) p.target = yardPoint();
+    }
+    hop = moving ? Math.abs(Math.sin(p.t * 9)) * 0.6 : Math.sin(p.t * 2) * 0.05 + 0.05;
+    p.pos.y = hop + Math.sin(p.lunge * Math.PI) * 1.4;
+    p.mesh.userData.head.rotation.x = Math.sin(p.t * 3) * 0.08 - p.lunge * 0.5;
+  }
   S.coins += petCps() * dt;
 }
 
@@ -589,8 +659,8 @@ function updateHud(dt) {
   if (P.carry && !hatch.active) pr = '🥚 Carrying egg — bring it to the Hatchery!';
   else if (st) {
     if (!S.owned[st.def.id]) pr = S.coins >= st.def.cost ? `Press E — unlock ${st.def.name} (${fmt(st.def.cost)} 🪙)` : `🔒 ${st.def.name} needs ${fmt(st.def.cost)} 🪙`;
-    else if (P.state === 'train') pr = st.def.kind === 'speed' ? 'Running… (move to stop)' : 'Lifting… (release E / move to stop)';
-    else pr = `Hold E — ${st.def.kind === 'speed' ? 'run' : 'train'} (+${+(st.def.gain * (st.def.kind === 'power' ? powerMult() : 1)).toFixed(1)} ${st.def.kind === 'speed' ? 'Speed' : 'Power'}/rep)`;
+    else if (P.state === 'train') pr = st.def.kind === 'speed' ? 'Running automatically… (move or press E to stop)' : 'Training automatically… (move or press E to stop)';
+    else pr = `Press E — auto-${st.def.kind === 'speed' ? 'run' : 'train'} (+${+(st.def.gain * (st.def.kind === 'power' ? powerMult() : 1)).toFixed(1)} ${st.def.kind === 'speed' ? 'Speed' : 'Power'}/rep)`;
   } else {
     const g = guards.find((q) => q.state === 'ko' && q.egg.present && Math.hypot(P.pos.x - q.pen.egg.x, P.pos.z - q.pen.egg.z) < 14);
     if (g && !P.carry) pr = 'Grab the egg!';
@@ -608,6 +678,7 @@ function updateHud(dt) {
     s.padMat.color.setHex(own || s.def.kind === 'speed' ? s.def.color : 0x666a75);
   });
   hatchLabel.set(P.carry ? '<div class="nm">⬇ DROP EGG HERE ⬇</div>' : '<div class="nm">🥚 HATCHERY</div>');
+  yardLabel.set(`<div class="nm">🐾 PET YARD</div><div>${S.pets.length ? 'Click a pet in the list to equip it' : 'Hatch eggs to fill me!'}</div>`);
   playerLabel.set(`<div>${rankOf(S.power)} · ⚡${fmt(S.power)}</div>`);
 
   for (const l of labels) {
