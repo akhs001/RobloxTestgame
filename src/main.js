@@ -12,6 +12,7 @@ const angDiff = (a, b) => { let d = (b - a) % TAU; if (d > Math.PI) d -= TAU; if
 const lerpAngle = (a, b, t) => a + angDiff(a, b) * t;
 const fmt = (n) => (n >= 1e4 ? (n / 1e3).toFixed(n >= 1e5 ? 0 : 1) + 'k' : Math.floor(n).toLocaleString());
 const $ = (id) => document.getElementById(id);
+const fmtP = (n) => (n < 100 ? (Math.floor(n * 10) / 10).toFixed(1) : fmt(n));
 const rnd = (a, b) => a + Math.random() * (b - a);
 
 // ------------------------------------------------------------------ save data
@@ -75,7 +76,7 @@ const maxHp = () => 100 + 10 * S.power;
 const pDmg = () => 5 + 1.5 * S.power;
 const targetScale = () => Math.min(3.3, 1 + 0.07 * Math.sqrt(S.power));
 const targetBulk = () => Math.min(2.0, 0.8 + 0.05 * Math.sqrt(S.power));
-const moveSpd = () => Math.min(28, 13 + S.speed * 0.12);
+const moveSpd = () => Math.min(28, 13 + S.speed * 0.2);
 const rankOf = (p) => RANKS.filter((r) => p >= r.at).pop().name;
 
 // ------------------------------------------------------------------ player
@@ -165,16 +166,24 @@ refreshPetsHud();
 // ------------------------------------------------------------------ input
 const keys = {}; const cam = { yaw: 0, pitch: 0.42, zoom: 1, shake: 0, focus: new THREE.Vector3(P.pos.x, 3, P.pos.z) };
 let started = false, dragging = false, hitstop = 0, T = 0;
+// Use the physical key (e.code) so WASD/E/J work on ANY keyboard layout (Greek, Russian, ...).
+function keyName(e) {
+  const c = e.code || '';
+  if (c.startsWith('Key')) return c.slice(3).toLowerCase();
+  if (c === 'Space') return ' ';
+  if (c.startsWith('Shift')) return 'shift';
+  return e.key.toLowerCase();
+}
 addEventListener('keydown', (e) => {
   if (!started) return;
-  const k = e.key.toLowerCase(); keys[k] = true;
+  const k = keyName(e); keys[k] = true;
   if (e.key === ' ' || e.key.startsWith('Arrow')) e.preventDefault();
   if (e.repeat) return;
   if (k === ' ' || k === 'shift') tryRoll();
   if (k === 'j') queueAttack();
   if (k === 'e') interact();
 });
-addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+addEventListener('keyup', (e) => { keys[keyName(e)] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('mousedown', (e) => { if (!started || e.target.closest('#pets')) return; if (e.button === 0) queueAttack(); if (e.button === 2) dragging = true; });
@@ -298,10 +307,10 @@ function guardKO(g) {
   g.hp = 0; g.state = 'ko'; g.timer = 10; g.anim = null; g.enraged = false;
   for (const k in g.tele) g.tele[k].grp.visible = false;
   const first = !S.beaten[g.idx]; S.beaten[g.idx] = true;
-  const bonus = Math.ceil(g.def.req * 0.1); gainPower(bonus);
+  const bonus = Math.ceil(g.def.req * 0.05); gainPower(bonus);
   sfx('win'); hitstop = 0.2; cam.shake = 0.9;
   toast('VICTORY!', false, 2600, '#ffd23f'); toast(first ? `${g.def.name} defeated! Grab the egg!` : 'Grab the egg!', true, 2600);
-  floatText(`+${fmt(bonus)} Power`, P.pos.clone().setY(5 * P.scale), 'gain', 1.4, 3);
+  floatText(`+${bonus} Power`, P.pos.clone().setY(5 * P.scale), 'gain', 1.4, 3);
   for (const c of [0xffd23f, 0xff5a5a, 0x6dff9c, 0x66ccff]) burst(g.pos.clone().setY(5 * g.def.scale), c, 14, 14, 1.4, 0.45, 12, 1.2);
   save();
 }
@@ -373,13 +382,13 @@ function updatePlayer(dt) {
       P.pos.x = lerp(P.pos.x, station.def.x, 1 - Math.exp(-dt * 10)); P.pos.z = lerp(P.pos.z, station.def.z, 1 - Math.exp(-dt * 10));
       P.face = lerpAngle(P.face, Math.PI, 1 - Math.exp(-dt * 10));
       const speedKind = station.def.kind === 'speed';
-      t.rep += dt / (speedKind ? 0.55 : 0.75);
+      t.rep += dt / (speedKind ? 0.6 : 0.9);
       if (speedKind) { walkAnim = 1.5; world.treadSpeed = 3; } else pose = 'curl';
       if (t.rep >= 1) {
         t.rep -= 1; sfx('rep');
         const at = P.pos.clone().setY(5.2 * P.scale);
-        if (speedKind) { S.speed += station.def.gain; P.pop = 0.6; floatText(`+${station.def.gain} Speed`, at, 'spd', 0.8, 2.5); }
-        else { const g = station.def.gain * powerMult(); gainPower(g); floatText(`+${+g.toFixed(1)} Power`, at, 'gain', 0.8, 2.5); }
+        if (speedKind) { S.speed += station.def.gain * 1; P.pop = 0.6; floatText(`+${station.def.gain} Speed`, at, 'spd', 0.8, 2.5); }
+        else { const g = station.def.gain * powerMult(); gainPower(g); floatText(`+${+g.toFixed(2)} Power`, at, 'gain', 0.8, 2.5); }
         burst(P.pos.clone().setY(2 * P.scale), station.def.color, 6, 6, 0.5, 0.3);
         if (Math.random() < 0.05) save();
       }
@@ -633,7 +642,7 @@ function updatePets(dt) {
 const cache = {};
 function setText(id, v) { if (cache[id] !== v) { cache[id] = v; $(id).textContent = v; } }
 function updateHud(dt) {
-  setText('v-power', fmt(S.power)); setText('v-rank', rankOf(S.power)); setText('v-speed', fmt(S.speed)); setText('v-coins', fmt(S.coins));
+  setText('v-power', fmtP(S.power)); setText('v-rank', rankOf(S.power)); setText('v-speed', fmtP(S.speed)); setText('v-coins', fmt(S.coins));
   setText('v-cps', petCps() ? `+${petCps().toFixed(1)}/s` : '');
   $('hp-fill').style.width = (100 * P.hp / maxHp()) + '%'; setText('hp-text', `${Math.ceil(P.hp)} / ${maxHp()}`);
 
@@ -641,7 +650,7 @@ function updateHud(dt) {
   let gt, gp = 0;
   if (P.carry) { gt = '🥚 Run the egg to the HATCHERY!'; gp = 1; }
   else if (next < 0) { gt = '🏆 All guards beaten! Keep growing & collecting pets.'; gp = 1; }
-  else { const g = GUARDS[next]; gt = `Next: ${g.name}<br>Power ${fmt(S.power)} / ${fmt(g.req)} recommended`; gp = S.power / g.req; }
+  else { const g = GUARDS[next]; gt = `Next: ${g.name}<br>Power ${fmtP(S.power)} / ${fmt(g.req)} recommended`; gp = S.power / g.req; }
   if (cache.goal !== gt) { cache.goal = gt; $('goal-text').innerHTML = gt; }
   $('goal-fill').style.width = clamp(gp * 100, 0, 100) + '%';
 
@@ -660,7 +669,7 @@ function updateHud(dt) {
   else if (st) {
     if (!S.owned[st.def.id]) pr = S.coins >= st.def.cost ? `Press E — unlock ${st.def.name} (${fmt(st.def.cost)} 🪙)` : `🔒 ${st.def.name} needs ${fmt(st.def.cost)} 🪙`;
     else if (P.state === 'train') pr = st.def.kind === 'speed' ? 'Running automatically… (move or press E to stop)' : 'Training automatically… (move or press E to stop)';
-    else pr = `Press E — auto-${st.def.kind === 'speed' ? 'run' : 'train'} (+${+(st.def.gain * (st.def.kind === 'power' ? powerMult() : 1)).toFixed(1)} ${st.def.kind === 'speed' ? 'Speed' : 'Power'}/rep)`;
+    else pr = `Press E — auto-${st.def.kind === 'speed' ? 'run' : 'train'} (+${+(st.def.gain * (st.def.kind === 'power' ? powerMult() : 1)).toFixed(2)} ${st.def.kind === 'speed' ? 'Speed' : 'Power'}/rep)`;
   } else {
     const g = guards.find((q) => q.state === 'ko' && q.egg.present && Math.hypot(P.pos.x - q.pen.egg.x, P.pos.z - q.pen.egg.z) < 14);
     if (g && !P.carry) pr = 'Grab the egg!';
@@ -673,13 +682,13 @@ function updateHud(dt) {
     guardLabels[i].set(`<div class="nm">${g.def.name}</div><div>Rec. Power ${fmt(g.def.req)}</div><div>${tag}</div>`);
   });
   world.stations.forEach((s, i) => {
-    const own = S.owned[s.def.id], gain = s.def.kind === 'speed' ? '+1 Speed / rep' : `+${s.def.gain} Power / rep`;
+    const own = S.owned[s.def.id], gain = s.def.kind === 'speed' ? `+${s.def.gain} Speed / rep` : `+${s.def.gain} Power / rep`;
     stationLabels[i].set(`<div class="nm">${s.def.name}</div><div>${own ? gain : `🔒 ${fmt(s.def.cost)} 🪙`}</div>`);
     s.padMat.color.setHex(own || s.def.kind === 'speed' ? s.def.color : 0x666a75);
   });
   hatchLabel.set(P.carry ? '<div class="nm">⬇ DROP EGG HERE ⬇</div>' : '<div class="nm">🥚 HATCHERY</div>');
   yardLabel.set(`<div class="nm">🐾 PET YARD</div><div>${S.pets.length ? 'Click a pet in the list to equip it' : 'Hatch eggs to fill me!'}</div>`);
-  playerLabel.set(`<div>${rankOf(S.power)} · ⚡${fmt(S.power)}</div>`);
+  playerLabel.set(`<div>${rankOf(S.power)} · ⚡${fmtP(S.power)}</div>`);
 
   for (const l of labels) {
     if ((l.hideWhen && l.hideWhen())) { l.el.style.display = 'none'; continue; }

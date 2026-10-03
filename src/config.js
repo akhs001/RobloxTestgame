@@ -14,11 +14,11 @@ export const RANKS = [
 
 // Gym stations. Power stations raise POWER (the main stat), treadmill raises SPEED.
 export const STATIONS = [
-  { id: 'bench', name: 'Dumbbell Bench', kind: 'power', gain: 1, cost: 0, x: -66, z: 40, color: 0x66ccff, db: 0.8 },
-  { id: 'barbell', name: 'Barbell Rack', kind: 'power', gain: 3, cost: 60, x: -55, z: 40, color: 0xffd23f, db: 1.1 },
-  { id: 'heavy', name: 'Heavy Rack', kind: 'power', gain: 10, cost: 400, x: -44, z: 40, color: 0xff8a3d, db: 1.5 },
-  { id: 'titan', name: 'Titan Rig', kind: 'power', gain: 35, cost: 2500, x: -33, z: 40, color: 0xc77dff, db: 2.0 },
-  { id: 'treadmill', name: 'Treadmill', kind: 'speed', gain: 1, cost: 0, x: -22, z: 40, color: 0x6dff9c, db: 0, standY: 0.7 },
+  { id: 'bench', name: 'Dumbbell Bench', kind: 'power', gain: 0.25, cost: 0, x: -66, z: 40, color: 0x66ccff, db: 0.8 },
+  { id: 'barbell', name: 'Barbell Rack', kind: 'power', gain: 0.75, cost: 80, x: -55, z: 40, color: 0xffd23f, db: 1.1 },
+  { id: 'heavy', name: 'Heavy Rack', kind: 'power', gain: 2.5, cost: 600, x: -44, z: 40, color: 0xff8a3d, db: 1.5 },
+  { id: 'titan', name: 'Titan Rig', kind: 'power', gain: 9, cost: 4000, x: -33, z: 40, color: 0xc77dff, db: 2.0 },
+  { id: 'treadmill', name: 'Treadmill', kind: 'speed', gain: 0.5, cost: 0, x: -22, z: 40, color: 0x6dff9c, db: 0, standY: 0.7 },
 ];
 
 // Guards: each pen holds one guard + one egg. req = recommended power.
